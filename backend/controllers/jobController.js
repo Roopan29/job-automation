@@ -345,16 +345,24 @@ const listJobs = asyncHandler(async (req, res) => {
   const total = db.prepare(`SELECT COUNT(*) AS n FROM jobs ${whereSql}`).get(params).n;
   const totalPages = Math.max(1, Math.ceil(total / limit));
 
+  /*
+   * Clamp an out-of-range page. Without this, ?page=999 echoes page:999 next
+   * to totalPages:3 with an empty list — a self-contradictory response that
+   * makes a client render "page 999 of 3" with nothing to show. Clamping
+   * means a stale or hand-edited page number lands on the last real page.
+   */
+  const safePage = Math.min(page, totalPages);
+
   const rows = db
     .prepare(
       `SELECT * FROM jobs ${whereSql} ORDER BY ${sort}, id DESC LIMIT @limit OFFSET @offset`
     )
-    .all({ ...params, limit, offset: (page - 1) * limit });
+    .all({ ...params, limit, offset: (safePage - 1) * limit });
 
   return ok(res, {
     jobs: rows.map(mapJob),
     total,
-    page,
+    page: safePage,
     limit,
     totalPages,
   }, `${total} job(s) match your filters`);

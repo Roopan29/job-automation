@@ -785,6 +785,44 @@ test('CSV export prefixes hostile scraped values so spreadsheets treat them as t
 });
 
 /* ------------------------------------------------------------------ *
+ * Pagination clamping
+ *
+ * An out-of-range ?page= must not produce a self-contradictory response
+ * (page 999 of 3 with an empty list), which would render as a broken
+ * pager in the UI.
+ * ------------------------------------------------------------------ */
+
+test('GET /api/jobs clamps an out-of-range page to the last real page', async () => {
+  const small = await api('GET', '/api/jobs?limit=3');
+  assert.equal(small.status, 200);
+  assert.ok(small.data.totalPages >= 1, 'needs a totalPages value');
+
+  // A page well past the end must clamp, not echo the request.
+  const far = await api('GET', '/api/jobs?limit=3&page=999');
+  assert.equal(far.status, 200);
+  assert.equal(far.data.page, small.data.totalPages, 'page must clamp to totalPages');
+  assert.ok(far.data.page <= far.data.totalPages, 'page must never exceed totalPages');
+  assert.ok(far.data.jobs.length > 0, 'the clamped page must return real rows, not an empty list');
+
+  // Exactly one past the end clamps the same way.
+  const onePast = await api('GET', `/api/jobs?limit=3&page=${small.data.totalPages + 1}`);
+  assert.equal(onePast.data.page, small.data.totalPages);
+
+  // In-range pages still behave normally. Derived from the fixture rather
+  // than hard-coded, so the test does not assume a particular row count.
+  const first = await api('GET', '/api/jobs?limit=3&page=1');
+  assert.equal(first.data.page, 1);
+  assert.equal(first.data.jobs.length, Math.min(3, first.data.total));
+  assert.ok(first.data.jobs.length > 0, 'page 1 must return rows when any exist');
+
+  // Non-positive pages clamp up to 1.
+  const neg = await api('GET', '/api/jobs?limit=3&page=-5');
+  assert.equal(neg.data.page, 1);
+  const zero = await api('GET', '/api/jobs?limit=3&page=0');
+  assert.equal(zero.data.page, 1);
+});
+
+/* ------------------------------------------------------------------ *
  * Teardown
  * ------------------------------------------------------------------ */
 
