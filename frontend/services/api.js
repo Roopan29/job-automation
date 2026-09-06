@@ -184,8 +184,14 @@ export const deleteApplication = (id) => http.delete(`/tracker/${id}`);
  * Download the CSV export. Goes through the same proxy so it works
  * behind a preview host, and triggers a real browser download.
  */
-export const exportApplicationsCsv = async () => {
-  const response = await http.get('/tracker/export/csv', { responseType: 'blob' });
+/**
+ * Download the tracker as CSV.
+ *
+ * Accepts the same filter params as getApplications so the file matches the
+ * table the user is looking at. Call it with no arguments to export all.
+ */
+export const exportApplicationsCsv = async (params) => {
+  const response = await http.get('/tracker/export/csv', { params, responseType: 'blob' });
   const blob = response instanceof Blob ? response : new Blob([response], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');

@@ -147,7 +147,7 @@ job-automation/
 │   ├── scheduler/cronJobs.js     # 4 scheduled jobs
 │   ├── middleware/uploadMiddleware.js
 │   ├── utils/                    # logger, apiResponse, fileHelper, notifier, serialize
-│   └── tests/                    # 92 tests + demo seeder
+│   └── tests/                    # 93 tests + demo seeder
 │
 └── frontend/
     ├── package.json
@@ -455,7 +455,7 @@ cd backend
 npm test
 ```
 
-**92 tests** — 37 service-level unit tests and 55 API integration tests. The integration
+**93 tests** — 37 service-level unit tests and 56 API integration tests. The integration
 suite boots the real Express app on an ephemeral port against a throwaway temp database,
 so it exercises the actual controllers, routes and SQLite schema rather than a mock.
 

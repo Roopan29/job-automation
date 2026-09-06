@@ -62,48 +62,63 @@ function toDateOnly(value) {
  * GET /api/tracker
  * ------------------------------------------------------------------ */
 
-const listApplications = asyncHandler(async (req, res) => {
-  const db = getDb();
+/**
+ * Build the shared WHERE clause + bound params for the tracker filters.
+ *
+ * Used by both the list endpoint and the CSV export so that "Export CSV"
+ * always matches what the table is currently showing. Previously the export
+ * ignored every filter, so exporting while filtered to one status silently
+ * produced the whole table.
+ *
+ * @param {object} query req.query
+ * @returns {{ whereSql: string, params: object }}
+ */
+function buildTrackerFilters(query) {
   const where = [];
   const params = {};
 
-  const status = toStr(req.query.status).toLowerCase();
+  const status = toStr(query.status).toLowerCase();
   if (status && status !== 'all') {
     where.push('lower(a.status) = @status');
     params.status = status;
   }
 
-  const method = toStr(req.query.method).toLowerCase();
+  const method = toStr(query.method).toLowerCase();
   if (method && method !== 'all') {
     where.push('lower(a.applied_method) = @method');
     params.method = method;
   }
 
-  const search = toStr(req.query.search);
+  const search = toStr(query.search);
   if (search) {
     where.push('(j.company LIKE @search OR j.title LIKE @search OR a.notes LIKE @search)');
     params.search = `%${search}%`;
   }
 
-  const dateFrom = toDateOnly(req.query.dateFrom);
+  const dateFrom = toDateOnly(query.dateFrom);
   if (dateFrom) {
     where.push('date(a.applied_at) >= date(@dateFrom)');
     params.dateFrom = dateFrom;
   }
 
-  const dateTo = toDateOnly(req.query.dateTo);
+  const dateTo = toDateOnly(query.dateTo);
   if (dateTo) {
     where.push('date(a.applied_at) <= date(@dateTo)');
     params.dateTo = dateTo;
   }
 
-  const source = toStr(req.query.source);
+  const source = toStr(query.source);
   if (source && source !== 'all') {
     where.push('j.source = @source');
     params.source = source;
   }
 
-  const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+  return { whereSql: where.length ? `WHERE ${where.join(' AND ')}` : '', params };
+}
+
+const listApplications = asyncHandler(async (req, res) => {
+  const db = getDb();
+  const { whereSql, params } = buildTrackerFilters(req.query);
   const total = db.prepare(`SELECT COUNT(*) AS n FROM applications a LEFT JOIN jobs j ON j.id = a.job_id ${whereSql}`).get(params).n;
 
   const rows = db.prepare(`${BASE_SELECT} ${whereSql} ORDER BY a.applied_at DESC, a.id DESC`).all(params);
@@ -422,12 +437,17 @@ function csvSafe(value) {
 const exportCsv = asyncHandler(async (req, res) => {
   const db = getDb();
 
+  // Honour the same filters as the table, so the download matches what the
+  // user is looking at. With no query params this exports everything.
+  const { whereSql, params } = buildTrackerFilters(req.query);
+
   const rows = db
     .prepare(
       `${BASE_SELECT}
+        ${whereSql}
         ORDER BY a.applied_at DESC, a.id DESC`
     )
-    .all();
+    .all(params);
 
   const records = rows.map((r) => {
     const app = mapApplication(r);

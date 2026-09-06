@@ -103,11 +103,32 @@ export default function TrackerPage() {
     load();
   }, [load]);
 
+  /** Whether any filter is currently narrowing the table. */
+  const filtersActive =
+    search || status !== 'all' || method !== 'all' || source !== 'all' || dateFrom || dateTo;
+
+  /** The filter set currently applied to the table, for the CSV export. */
+  const activeFilters = useMemo(
+    () => ({
+      search: search || undefined,
+      status: status !== 'all' ? status : undefined,
+      method: method !== 'all' ? method : undefined,
+      source: source !== 'all' ? source : undefined,
+      dateFrom: dateFrom || undefined,
+      dateTo: dateTo || undefined,
+    }),
+    [search, status, method, source, dateFrom, dateTo]
+  );
+
   const doExport = async () => {
     setExporting(true);
     try {
-      await exportApplicationsCsv();
-      toast.success('CSV downloaded');
+      // Export what is on screen, not the whole table.
+      await exportApplicationsCsv(activeFilters);
+      const n = applications.length;
+      toast.success(
+        filtersActive ? `CSV downloaded — ${n} filtered row(s)` : 'CSV downloaded'
+      );
     } catch (err) {
       toast.error(err.message);
     } finally {
@@ -124,9 +145,6 @@ export default function TrackerPage() {
       toast.error(err.message);
     }
   };
-
-  const filtersActive =
-    search || status !== 'all' || method !== 'all' || source !== 'all' || dateFrom || dateTo;
 
   const sourceOptions = useMemo(
     () => Object.keys(stats?.bySource || {}).sort(),

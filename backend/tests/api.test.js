@@ -550,6 +550,30 @@ test('GET /api/tracker/export/csv streams a downloadable file', async () => {
   assert.match(csv, /Globex/);
 });
 
+test('GET /api/tracker/export/csv honours the same filters as the table', async () => {
+  // Regression: the export used to ignore every filter, so downloading while
+  // the table was filtered to one status silently produced the whole table.
+  const csvRows = async (qs) => {
+    const res = await api('GET', `/api/tracker/export/csv${qs}`, undefined, { raw: true });
+    assert.equal(res.status, 200);
+    const text = await res.text();
+    return text.split('\n').filter((l) => l.trim() !== '').length - 1;
+  };
+
+  const all = await csvRows('');
+  const listAll = await api('GET', '/api/tracker');
+  assert.equal(all, listAll.data.total, 'an unfiltered export should contain every row');
+
+  const rejected = await csvRows('?status=rejected');
+  const listRejected = await api('GET', '/api/tracker?status=rejected');
+  assert.equal(rejected, listRejected.data.total, 'a filtered export must match the filtered list');
+  assert.ok(rejected < all, 'the status filter should narrow the export');
+
+  // A filter matching nothing must produce a header-only file, not everything.
+  const none = await csvRows('?status=zzz-no-such-status');
+  assert.equal(none, 0, 'an unmatched filter should export zero rows');
+});
+
 /* ------------------------------------------------------------------ *
  * Dashboard + system
  * ------------------------------------------------------------------ */
