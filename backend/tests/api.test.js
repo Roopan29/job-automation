@@ -653,6 +653,80 @@ test('GET /api/dashboard works with no resumes at all', async () => {
 });
 
 /* ------------------------------------------------------------------ *
+ * Notification feed
+ *
+ * Desktop notifications need a notification daemon, which CI/sandboxes
+ * do not have. The in-memory feed is the fallback that the UI reads, so
+ * it must still record every alert.
+ * ------------------------------------------------------------------ */
+
+test('notification feed records alerts even with no display daemon', async () => {
+  const notifier = require('../utils/notifier');
+  notifier.clearFeed();
+
+  const before = await api('GET', '/api/notifications?limit=10');
+  assert.equal(before.status, 200);
+  assert.equal(before.data.total, 0, 'feed starts empty');
+
+  notifier.notifyScrapeDone(12, 4, 'RemoteOK');
+  notifier.notifyCaptcha('Acme Corp', 'Senior React Developer');
+  notifier.notifyFollowUp('Brightline', 'Frontend Engineer');
+
+  const after = await api('GET', '/api/notifications?limit=10');
+  assert.equal(after.data.total, 3, 'all three alerts must be recorded');
+
+  const entries = after.data.notifications;
+  assert.equal(entries.length, 3);
+  // Newest first, so the UI shows the latest alert at the top.
+  assert.match(entries[0].title, /Follow-up/i);
+  assert.match(entries[1].title, /CAPTCHA/i);
+  assert.match(entries[2].title, /scrape/i);
+
+  for (const entry of entries) {
+    assert.ok(entry.id, 'each entry needs an id');
+    assert.ok(entry.at, 'each entry needs a timestamp');
+    assert.ok(entry.message.length > 0, 'each entry needs a message');
+    assert.ok(['info', 'success', 'warning', 'error'].includes(entry.level));
+  }
+});
+
+test('notification feed honours the limit param', async () => {
+  const res = await api('GET', '/api/notifications?limit=2');
+  assert.equal(res.data.notifications.length, 2, 'limit must cap the returned entries');
+  assert.equal(res.data.total, 3, 'total still reports the real feed size');
+});
+
+test('DELETE /api/notifications clears the feed', async () => {
+  const cleared = await api('DELETE', '/api/notifications');
+  assert.equal(cleared.status, 200);
+
+  const after = await api('GET', '/api/notifications');
+  assert.equal(after.data.total, 0, 'the feed must be empty after clearing');
+});
+
+test('a scrape where every source fails does not claim success', async () => {
+  // Regression guard: notifications must not fire for a scrape that
+  // fetched nothing, otherwise the UI reports phantom new jobs.
+  const notifier = require('../utils/notifier');
+  notifier.clearFeed();
+
+  const res = await api('POST', '/api/jobs/scrape', {
+    query: 'react',
+    location: 'Remote',
+    sources: ['remoteok'],
+    limit: 5,
+  });
+
+  assert.equal(res.status, 502, 'all sources failing is a 502, not a 200');
+  // api() spreads the { success, data|error } envelope onto the result.
+  assert.equal(res.success, false);
+  assert.match(res.error, /No jobs could be fetched/);
+
+  const feed = await api('GET', '/api/notifications');
+  assert.equal(feed.data.total, 0, 'no "scrape finished" alert for a scrape that found nothing');
+});
+
+/* ------------------------------------------------------------------ *
  * Teardown
  * ------------------------------------------------------------------ */
 
