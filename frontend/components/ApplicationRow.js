@@ -8,20 +8,20 @@
  *     status_history on the backend)
  *   • follow-up date: native date input, saved on change
  *   • applied via: 🤖 auto / 👤 manual
- *   • [📝 Notes] [📧 Follow-up Email] [🗑️ Delete]
+ *   • [📝 Notes] [🎓 Interview Prep] [📧 Follow-up Email] [🗑️ Delete]
  */
 
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { ChevronDown, StickyNote, Mail, Trash2, Bot, User, ExternalLink } from 'lucide-react';
+import { ChevronDown, StickyNote, Mail, Trash2, Bot, User, ExternalLink, GraduationCap } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { updateApplicationStatus, updateApplicationDates } from '@/services/api';
 import StatusBadge, { STATUS_META, STATUS_KEYS } from './StatusBadge';
 import MatchScoreBadge from './MatchScoreBadge';
 import { Spinner } from './Loader';
 
-export default function ApplicationRow({ application, onChanged, onNotes, onFollowUpEmail, onDelete }) {
+export default function ApplicationRow({ application, onChanged, onNotes, onInterviewPrep, onFollowUpEmail, onDelete }) {
   const [statusOpen, setStatusOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [followUp, setFollowUp] = useState(application.followUpDate || '');
@@ -191,6 +191,14 @@ export default function ApplicationRow({ application, onChanged, onNotes, onFoll
             title={application.notes ? 'View / edit notes' : 'Add notes'}
           >
             <StickyNote size={14} />
+          </button>
+          <button
+            type="button"
+            onClick={() => onInterviewPrep?.(application)}
+            className="btn-ghost btn-sm"
+            title="Prepare for the interview"
+          >
+            <GraduationCap size={14} />
           </button>
           <button type="button" onClick={() => onFollowUpEmail?.(application)} className="btn-ghost btn-sm" title="Draft a follow-up email">
             <Mail size={14} />

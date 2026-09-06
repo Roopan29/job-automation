@@ -4,14 +4,14 @@
  * TOP     mini stat chips (click to filter by that status)
  * FILTER  search · status · method · date range · source · Export CSV
  * TABLE   company, role, match, editable status, dates, method, actions
- * MODALS  Notes (+ status history timeline) · Follow-up email draft
+ * MODALS  Notes (+ status history timeline) · Interview prep · Follow-up email draft
  * BOTTOM  line / bar / doughnut charts
  */
 
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Download, Search as SearchIcon, X, Send, Trash2, StickyNote, Copy, Check } from 'lucide-react';
+import { Download, Search as SearchIcon, X, Send, Trash2, StickyNote, Copy, Check, GraduationCap } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   getApplications,
@@ -21,6 +21,7 @@ import {
   deleteApplication,
   exportApplicationsCsv,
   generateFollowUpEmail,
+  generateInterviewPrep,
 } from '@/services/api';
 import ApplicationRow from '@/components/ApplicationRow';
 import StatusBadge, { STATUS_META, STATUS_KEYS } from '@/components/StatusBadge';
@@ -70,6 +71,7 @@ export default function TrackerPage() {
 
   // modals
   const [notesApp, setNotesApp] = useState(null);
+  const [prepApp, setPrepApp] = useState(null);
   const [emailApp, setEmailApp] = useState(null);
   const [deleteApp, setDeleteApp] = useState(null);
 
@@ -286,6 +288,7 @@ export default function TrackerPage() {
                     application={app}
                     onChanged={load}
                     onNotes={setNotesApp}
+                    onInterviewPrep={setPrepApp}
                     onFollowUpEmail={setEmailApp}
                     onDelete={setDeleteApp}
                   />
@@ -330,6 +333,7 @@ export default function TrackerPage() {
 
       {/* ---- modals -------------------------------------------------------------- */}
       <NotesModal application={notesApp} onClose={() => setNotesApp(null)} onSaved={load} />
+      <InterviewPrepModal application={prepApp} onClose={() => setPrepApp(null)} />
       <FollowUpEmailModal application={emailApp} onClose={() => setEmailApp(null)} />
 
       <ConfirmModal
@@ -453,6 +457,109 @@ function NotesModal({ application, onClose, onSaved }) {
           </button>
           <button type="button" className="btn-primary" onClick={save} disabled={saving}>
             {saving ? <Spinner size={14} /> : <StickyNote size={14} />} Save notes
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * Interview prep modal
+ * ------------------------------------------------------------------ */
+
+function InterviewPrepModal({ application, onClose }) {
+  const [questions, setQuestions] = useState([]);
+  const [source, setSource] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!application) return;
+    setQuestions([]);
+    setCopied(false);
+    setLoading(true);
+    generateInterviewPrep(application.jobId || 0)
+      .then((data) => {
+        setQuestions(data.questions || []);
+        setSource(data.source === 'ai' ? 'AI generated' : 'Template engine');
+      })
+      .catch((err) => toast.error(err.message))
+      .finally(() => setLoading(false));
+  }, [application]);
+
+  if (!application) return null;
+
+  /** Flatten the Q&A into plain text for the clipboard. */
+  const copy = async () => {
+    const text = questions
+      .map((q, i) => `${i + 1}. ${q.question}\n   ${q.suggestedAnswer || ''}`.trimEnd())
+      .join('\n\n');
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      toast.success('Questions copied to the clipboard');
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error('Could not access the clipboard');
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm"
+      onMouseDown={onClose}
+      role="dialog"
+      aria-modal="true"
+    >
+      <div
+        className="flex max-h-[85vh] w-full max-w-2xl animate-slide-up flex-col overflow-hidden rounded-xl bg-white shadow-xl"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
+          <div>
+            <h3 className="text-base font-semibold text-slate-900">Interview prep</h3>
+            <p className="mt-0.5 text-xs text-slate-500">
+              {application.job?.company} — {application.job?.title}
+              {source ? ` · ${source}` : ''}
+            </p>
+          </div>
+          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600" aria-label="Close">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto p-5">
+          {loading ? (
+            <Loader full label="Preparing your questions…" />
+          ) : questions.length === 0 ? (
+            <p className="text-sm text-slate-400">No questions could be generated for this role.</p>
+          ) : (
+            <ol className="space-y-3">
+              {questions.map((q, i) => (
+                <li key={q.question} className="rounded-lg border border-slate-200 p-3">
+                  <p className="flex gap-2 text-sm font-medium text-slate-800">
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-50 text-[11px] font-bold text-brand-600">
+                      {i + 1}
+                    </span>
+                    {q.question}
+                  </p>
+                  {q.suggestedAnswer && (
+                    <p className="mt-2 pl-7 text-[13px] leading-relaxed text-slate-500">{q.suggestedAnswer}</p>
+                  )}
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-3">
+          <button type="button" className="btn-secondary" onClick={copy} disabled={!questions.length}>
+            {copied ? <Check size={14} className="text-green-600" /> : <Copy size={14} />}
+            {copied ? 'Copied' : 'Copy all'}
+          </button>
+          <button type="button" className="btn-secondary" onClick={onClose}>
+            Close
           </button>
         </div>
       </div>

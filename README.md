@@ -203,7 +203,8 @@ console; **Stop** halts after the current job.
 Every application in one filterable table — searchable by company, role or notes, and
 filterable by status, method (auto/manual), source and date range. Status is editable
 inline with a single click. Per-row actions: set follow-up and interview dates, edit notes
-(with a full status-change history timeline), draft a follow-up email, or delete. Export
+(with a full status-change history timeline), generate interview prep (10 tailored questions
+with suggested answers, copyable), draft a follow-up email, or delete. Export
 everything to CSV. Three charts below: 30-day trend, source breakdown, status breakdown.
 
 ### 6. Preferences (`/preferences`)
