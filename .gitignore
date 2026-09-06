@@ -1,0 +1,47 @@
+# ------------------------------------------------------------------
+# JobBot .gitignore
+# Personal, local-only tool: nothing in here belongs in version control.
+# ------------------------------------------------------------------
+
+# --- Node ---
+node_modules/
+npm-debug.log*
+yarn-error.log*
+.pnp.*
+
+# --- Next.js build output ---
+frontend/.next/
+frontend/out/
+frontend/next-env.d.ts
+
+# --- Local SQLite database + WAL sidecars ---
+backend/db/*.sqlite
+backend/db/*.sqlite-journal
+backend/db/*.sqlite-wal
+backend/db/*.sqlite-shm
+
+# --- Uploaded resumes (personal data) ---
+backend/uploads/resumes/*
+!backend/uploads/resumes/.gitkeep
+
+# --- Secrets & local config ---
+backend/.env
+.env
+.env.local
+.env*.local
+frontend/.env.local
+frontend/.env*.local
+
+# --- Puppeteer browser downloads ---
+.cache/puppeteer/
+
+# --- Editors / OS ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# --- Test / coverage output ---
+coverage/
+*.lcov
