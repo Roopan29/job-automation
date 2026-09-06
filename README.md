@@ -209,8 +209,9 @@ Every application in one filterable table — searchable by company, role or not
 filterable by status, method (auto/manual), source and date range. Status is editable
 inline with a single click. Per-row actions: set follow-up and interview dates, edit notes
 (with a full status-change history timeline), generate interview prep (10 tailored questions
-with suggested answers, copyable), draft a follow-up email, or delete. Export
-everything to CSV. Three charts below: 30-day trend, source breakdown, status breakdown.
+with suggested answers, copyable), draft a follow-up email, or delete. **Export CSV**
+downloads exactly the rows the current filters show — clear the filters to export
+everything. Three charts below: 30-day trend, source breakdown, status breakdown.
 
 ### 6. Preferences (`/preferences`)
 Personal info (used to fill application forms), job targets (roles, locations, salary
@@ -257,7 +258,8 @@ rejected.
 
 12. **Go to Application Tracker.** Update statuses as recruiters respond.
 13. **Set follow-up dates.** The bot emails you a drafted follow-up at 08:00 on the day.
-14. **Export CSV** any time for your own spreadsheet or records.
+14. **Export CSV** any time for your own spreadsheet or records. The file matches the
+    filters currently applied — filter to `rejected`, export, and you get only those rows.
 
 ### Automating it
 
