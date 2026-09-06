@@ -34,6 +34,32 @@ const USER_AGENT =
 
 const SOURCES = ['remoteok', 'remotive', 'linkedin', 'indeed', 'glassdoor'];
 
+/**
+ * Endpoint bases. Resolved at call time (not module load) so they can be
+ * overridden at runtime — this is what lets the parsers be exercised
+ * against a local mock in tests, since the real boards are frequently
+ * unreachable from CI/sandboxes and their parsing logic still needs
+ * coverage.
+ *
+ * @param {'remoteok'|'remotive'|'linkedin'} name
+ * @returns {string}
+ */
+function endpoint(name) {
+  switch (name) {
+    case 'remoteok':
+      return process.env.REMOTEOK_API_URL || 'https://remoteok.com/api';
+    case 'remotive':
+      return process.env.REMOTIVE_API_URL || 'https://remotive.com/api/remote-jobs';
+    case 'linkedin':
+      return (
+        process.env.LINKEDIN_GUEST_URL ||
+        'https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search'
+      );
+    default:
+      throw new Error(`Unknown endpoint: ${name}`);
+  }
+}
+
 /** Human friendly labels stored in the DB / shown in the UI. */
 const SOURCE_LABELS = {
   remoteok: 'RemoteOK',
@@ -90,6 +116,24 @@ async function fetchJson(url, { timeout = 20000, accept = 'application/json' } =
 }
 
 /** Strip HTML, collapse whitespace. */
+/**
+ * Join non-empty strings with " / ", dropping blanks and duplicates.
+ * Job boards frequently repeat the same value in two location fields,
+ * which used to render as "Worldwide / Worldwide".
+ *
+ * @param {Array<string|undefined|null>} parts
+ * @returns {string}
+ */
+function joinUnique(parts) {
+  const seen = [];
+  for (const raw of parts) {
+    const value = String(raw == null ? '' : raw).trim();
+    if (!value) continue;
+    if (!seen.some((s) => s.toLowerCase() === value.toLowerCase())) seen.push(value);
+  }
+  return seen.join(' / ');
+}
+
 function stripHtml(html = '') {
   return String(html)
     .replace(/<script[\s\S]*?<\/script>/gi, ' ')
@@ -282,8 +326,8 @@ async function closeBrowser() {
  * ------------------------------------------------------------------ */
 
 async function scrapeRemoteOK({ query = '', limit = 25 } = {}) {
-  logger.step('RemoteOK: fetching https://remoteok.com/api');
-  const data = await fetchJson('https://remoteok.com/api');
+  logger.step(`RemoteOK: fetching ${endpoint('remoteok')}`);
+  const data = await fetchJson(endpoint('remoteok'));
 
   if (!Array.isArray(data)) throw new Error('Unexpected RemoteOK payload (expected an array)');
 
@@ -301,17 +345,24 @@ async function scrapeRemoteOK({ query = '', limit = 25 } = {}) {
       normalizeJob({
         title: item.position,
         company: item.company,
-        location: [item.location, item.candidate_required_location].filter(Boolean).join(' / ') || 'Remote',
-        salary: [item.salary_min && item.salary_max ? `$${item.salary_min} – $${item.salary_max}` : '', item.salary]
-          .filter(Boolean)
-          .join(' ')
-          .trim(),
+        location: joinUnique([item.location, item.candidate_required_location]) || 'Remote',
+        // RemoteOK often sends BOTH a numeric min/max and a formatted salary
+        // string. Joining them produced "$140000 – $180000 $140k - $180k",
+        // so prefer the human-readable string and only build from min/max
+        // when it is absent.
+        salary:
+          item.salary ||
+          (item.salary_min && item.salary_max ? `$${item.salary_min} – $${item.salary_max}` : ''),
         job_type: 'remote',
         description: stripHtml(item.description || ''),
         requirements: item.tags || [],
         source: 'remoteok',
         source_url: item.url || `https://remoteok.com/remote-jobs/${item.id}`,
-        posted_date: item.date || item.epoch ? new Date((item.epoch || 0) * 1000).toISOString() : null,
+        // Careful with precedence: `a || b ? x : y` parses as `(a || b) ? x : y`.
+        // Written that way, a job carrying `date` but no `epoch` took the
+        // truthy branch and computed new Date(0) -> every post dated
+        // 1970-01-01. Prefer the ISO `date`, fall back to the epoch seconds.
+        posted_date: item.date || (item.epoch ? new Date(item.epoch * 1000).toISOString() : null),
       })
     )
     .filter(Boolean);
@@ -325,7 +376,7 @@ async function scrapeRemoteOK({ query = '', limit = 25 } = {}) {
  * ------------------------------------------------------------------ */
 
 async function scrapeRemotive({ query = '', limit = 25 } = {}) {
-  const url = `https://remotive.com/api/remote-jobs?search=${encodeURIComponent(query)}&limit=${Math.min(100, Math.max(5, limit))}`;
+  const url = `${endpoint('remotive')}?search=${encodeURIComponent(query)}&limit=${Math.min(100, Math.max(5, limit))}`;
   logger.step(`Remotive: fetching ${url}`);
   const data = await fetchJson(url);
 
@@ -337,7 +388,7 @@ async function scrapeRemotive({ query = '', limit = 25 } = {}) {
       normalizeJob({
         title: item.title,
         company: item.company_name,
-        location: [item.candidate_required_location, item.location].filter(Boolean).join(' / ') || 'Remote',
+        location: joinUnique([item.candidate_required_location, item.location]) || 'Remote',
         salary: item.salary || '',
         job_type: 'remote',
         description: stripHtml(item.description || ''),
@@ -359,7 +410,7 @@ async function scrapeRemotive({ query = '', limit = 25 } = {}) {
 
 async function scrapeLinkedIn({ query = '', location = '', limit = 25 } = {}) {
   const url =
-    `https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search` +
+    endpoint('linkedin') +
     `?keywords=${encodeURIComponent(query)}` +
     `&location=${encodeURIComponent(location || 'United States')}` +
     `&start=0`;

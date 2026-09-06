@@ -432,3 +432,161 @@ test('flattenLaunchError tolerates junk input', () => {
     'a huge message is capped'
   );
 });
+
+/* ------------------------------------------------------------------ *
+ * jobScraper parsing — exercised against a local mock of the public
+ * JSON APIs. The real boards are unreachable from CI, but the payload
+ * -> job row transformation is the part most worth covering.
+ * ------------------------------------------------------------------ */
+
+const { startMockJobBoard } = require('./helpers/mockJobBoard');
+
+test('RemoteOK parser: date without epoch is not coerced to 1970', async () => {
+  const board = await startMockJobBoard();
+  process.env.REMOTEOK_API_URL = board.remoteOkUrl;
+  try {
+    const jobs = await jobScraper.scrapeRemoteOK({ query: '', limit: 10 });
+    const react = jobs.find((j) => j.title === 'Senior React Developer');
+
+    assert.ok(react, 'the mock job should be parsed');
+    // Regression: `item.date || item.epoch ? ... : ...` parses as
+    // `(item.date || item.epoch) ? ...`, so a job with an ISO date but no
+    // epoch fell into new Date(0) and dated every post 1970-01-01.
+    assert.equal(react.posted_date, '2026-09-01');
+    assert.equal(react.posted_date.startsWith('1970'), false, 'must not fall back to the epoch default');
+
+    // The job that DOES carry an epoch should still work.
+    const backend = jobs.find((j) => j.title === 'Backend Engineer');
+    assert.equal(backend.posted_date.startsWith('1970'), false);
+  } finally {
+    delete process.env.REMOTEOK_API_URL;
+    await board.close();
+  }
+});
+
+test('RemoteOK parser: does not duplicate salary or location', async () => {
+  const board = await startMockJobBoard();
+  process.env.REMOTEOK_API_URL = board.remoteOkUrl;
+  try {
+    const jobs = await jobScraper.scrapeRemoteOK({ query: '', limit: 10 });
+    const react = jobs.find((j) => j.title === 'Senior React Developer');
+
+    // Regression: min/max AND the formatted string were concatenated into
+    // "$140000 – $180000 $140k - $180k".
+    assert.equal(react.salary, '$140k - $180k');
+    assert.equal(react.salary.includes('140000'), false, 'must not also carry the raw numeric range');
+
+    // Regression: both location fields held "Worldwide", rendering
+    // "Worldwide / Worldwide".
+    assert.equal(react.location, 'Worldwide');
+    assert.equal(react.location.includes('/'), false, 'duplicate locations must be collapsed');
+
+    // A job with only one location field is unaffected.
+    const backend = jobs.find((j) => j.title === 'Backend Engineer');
+    assert.equal(backend.location, 'Europe');
+    assert.equal(backend.salary, '$90000 – $120000', 'builds from min/max when no string is given');
+  } finally {
+    delete process.env.REMOTEOK_API_URL;
+    await board.close();
+  }
+});
+
+test('RemoteOK parser: skips boilerplate, strips HTML, keeps tags', async () => {
+  const board = await startMockJobBoard();
+  process.env.REMOTEOK_API_URL = board.remoteOkUrl;
+  try {
+    const jobs = await jobScraper.scrapeRemoteOK({ query: '', limit: 10 });
+
+    assert.equal(jobs.length, 2, 'the id-less legal boilerplate entry must be dropped');
+    const react = jobs.find((j) => j.title === 'Senior React Developer');
+    assert.equal(/<[a-z]/i.test(react.description), false, 'HTML must be stripped from the description');
+    assert.match(react.description, /React/);
+    // requirements are stored as a JSON string for SQLite; matchingEngine
+    // coerces them back with toRequirementArray().
+    assert.deepEqual(matchingEngine.toRequirementArray(react.requirements), [
+      'react',
+      'typescript',
+      'graphql',
+    ]);
+    assert.equal(react.source, 'RemoteOK', 'the human label is stored, not the key');
+  } finally {
+    delete process.env.REMOTEOK_API_URL;
+    await board.close();
+  }
+});
+
+test('Remotive parser: maps its differently-named fields', async () => {
+  const board = await startMockJobBoard();
+  process.env.REMOTIVE_API_URL = board.remotiveUrl;
+  try {
+    const jobs = await jobScraper.scrapeRemotive({ query: '', limit: 10 });
+
+    assert.equal(jobs.length, 1);
+    const job = jobs[0];
+    assert.equal(job.title, 'Frontend Engineer');
+    assert.equal(job.company, 'Initech', 'company_name -> company');
+    assert.equal(job.location, 'Remote - US');
+    assert.equal(job.salary, '$110k - $140k');
+    assert.equal(job.posted_date, '2026-09-02', 'publication_date -> posted_date');
+    assert.equal(job.source, 'Remotive');
+  } finally {
+    delete process.env.REMOTIVE_API_URL;
+    await board.close();
+  }
+});
+
+test('scrapeJobs: merges both JSON sources and reports per-source counts', async () => {
+  const board = await startMockJobBoard();
+  process.env.REMOTEOK_API_URL = board.remoteOkUrl;
+  process.env.REMOTIVE_API_URL = board.remotiveUrl;
+  try {
+    const outcome = await jobScraper.scrapeJobs({
+      query: '',
+      location: 'Remote',
+      sources: ['remoteok', 'remotive'],
+      limit: 20,
+      useBrowser: false,
+    });
+
+    assert.equal(outcome.jobs.length, 3, '2 RemoteOK + 1 Remotive, no duplicates');
+    const titles = outcome.jobs.map((j) => j.title).sort();
+    assert.deepEqual(titles, ['Backend Engineer', 'Frontend Engineer', 'Senior React Developer']);
+
+    const bySource = Object.fromEntries(outcome.results.map((r) => [r.source, r]));
+    assert.equal(bySource.remoteok.status, 'success');
+    assert.equal(bySource.remoteok.found, 2);
+    assert.equal(bySource.remotive.status, 'success');
+    assert.equal(bySource.remotive.found, 1);
+  } finally {
+    delete process.env.REMOTEOK_API_URL;
+    delete process.env.REMOTIVE_API_URL;
+    await board.close();
+  }
+});
+
+test('scrapeJobs: one source failing does not sink the other', async () => {
+  const board = await startMockJobBoard();
+  // Remotive points at a port nothing is listening on.
+  process.env.REMOTEOK_API_URL = board.remoteOkUrl;
+  process.env.REMOTIVE_API_URL = 'http://127.0.0.1:1/remotive';
+  try {
+    const outcome = await jobScraper.scrapeJobs({
+      query: '',
+      location: 'Remote',
+      sources: ['remoteok', 'remotive'],
+      limit: 20,
+      useBrowser: false,
+    });
+
+    const bySource = Object.fromEntries(outcome.results.map((r) => [r.source, r]));
+    assert.equal(bySource.remoteok.status, 'success', 'the healthy source still returns jobs');
+    assert.equal(bySource.remoteok.found, 2);
+    assert.equal(bySource.remotive.status, 'failed', 'the broken source is isolated');
+    assert.ok(bySource.remotive.error.length > 0, 'and carries a human-readable reason');
+    assert.equal(outcome.jobs.length, 2);
+  } finally {
+    delete process.env.REMOTEOK_API_URL;
+    delete process.env.REMOTIVE_API_URL;
+    await board.close();
+  }
+});
