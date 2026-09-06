@@ -337,6 +337,7 @@ override.
 | `PUPPETEER_USER_AGENT` | Chrome 120 UA | Bot user agent |
 | `CAPTCHA_TIMEOUT_MS` | `300000` | 5 min to solve a CAPTCHA |
 | `NAV_TIMEOUT_MS` | `45000` | Page navigation timeout |
+| `DISPLAY` / `WAYLAND_DISPLAY` | *(system)* | Set by your desktop session. If either is present the bot can run headful so you can solve CAPTCHAs; on a headless server neither is set, so it falls back to headless |
 | `REMOTEOK_API_URL` | `https://remoteok.com/api` | RemoteOK JSON feed |
 | `REMOTIVE_API_URL` | `https://remotive.com/api/remote-jobs` | Remotive JSON feed |
 | `LINKEDIN_GUEST_URL` | LinkedIn guest-search endpoint | Public, no login needed |
