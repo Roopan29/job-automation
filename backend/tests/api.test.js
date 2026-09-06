@@ -727,6 +727,64 @@ test('a scrape where every source fails does not claim success', async () => {
 });
 
 /* ------------------------------------------------------------------ *
+ * CSV export safety
+ *
+ * Job titles/companies come from scraped web pages, so they are
+ * attacker-influenced. A cell starting with = + - @ TAB or CR is
+ * evaluated as a formula by Excel/Google Sheets on open.
+ * ------------------------------------------------------------------ */
+
+test('csvSafe defuses formula-injection characters', () => {
+  const { csvSafe } = require('../controllers/trackerController');
+
+  assert.equal(csvSafe('=HYPERLINK("http://evil","x")'), '\'=HYPERLINK("http://evil","x")');
+  assert.equal(csvSafe('+1-555-EVIL'), "'+1-555-EVIL");
+  assert.equal(csvSafe('@SUM(A1)'), "'@SUM(A1)");
+  assert.equal(csvSafe('-2+3'), "'-2+3");
+  assert.equal(csvSafe('\t=CMD()'), "'\t=CMD()");
+
+  // Ordinary values must pass through untouched.
+  assert.equal(csvSafe('Northwind Labs'), 'Northwind Labs');
+  assert.equal(csvSafe('Senior React Developer'), 'Senior React Developer');
+  assert.equal(csvSafe('https://remoteok.com/remote-jobs/1'), 'https://remoteok.com/remote-jobs/1');
+  assert.equal(csvSafe(null), '');
+  assert.equal(csvSafe(undefined), '');
+  assert.equal(csvSafe(42), '42');
+});
+
+test('CSV export prefixes hostile scraped values so spreadsheets treat them as text', async () => {
+  const db = getDb();
+  const job = db
+    .prepare(
+      `INSERT INTO jobs (title, company, location, source, source_url, match_score, scraped_at)
+       VALUES (?, ?, ?, ?, ?, ?, datetime('now'))`
+    )
+    .run('=HYPERLINK("http://evil.example","click")', '+1-555-EVIL', 'Remote', 'TestBoard', 'https://example.com/x', 50);
+  const jobId = Number(job.lastInsertRowid);
+
+  // Attach an application so the row appears in the tracker export.
+  await api('POST', `/api/apply/${jobId}`, {});
+
+  const res = await fetch(`${base}/api/tracker/export/csv`);
+  assert.equal(res.status, 200);
+  const csv = await res.text();
+
+  const line = csv.split('\n').find((l) => l.includes('EVIL'));
+  assert.ok(line, 'the hostile row should be in the export');
+
+  // Both the company and the title must be prefixed with a single quote.
+  assert.ok(line.includes('"\'=HYPERLINK') || line.includes("'=HYPERLINK"), 'the = title must be quoted-prefixed');
+  assert.ok(line.includes("'+1-555-EVIL"), 'the + company must be quoted-prefixed');
+  // And no cell may still begin with a bare formula character.
+  assert.equal(/^=/.test(line), false, 'the row must not start with a bare =');
+
+  // Tidy up so later tests see a clean database.
+  await api('DELETE', `/api/tracker/${jobId}`).catch(() => {});
+  db.prepare('DELETE FROM applications WHERE job_id = ?').run(jobId);
+  db.prepare('DELETE FROM jobs WHERE id = ?').run(jobId);
+});
+
+/* ------------------------------------------------------------------ *
  * Teardown
  * ------------------------------------------------------------------ */
 

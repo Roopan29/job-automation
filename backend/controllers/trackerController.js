@@ -395,6 +395,30 @@ const deleteApplication = asyncHandler(async (req, res) => {
  * GET /api/tracker/export/csv
  * ------------------------------------------------------------------ */
 
+/**
+ * Defuse CSV formula injection (a.k.a. CSV/DDE injection).
+ *
+ * Job titles, companies and locations come from *scraped web pages*, so
+ * they are attacker-influenced. csv-stringify quotes cells correctly, but
+ * Excel and Google Sheets still evaluate a cell whose first character is
+ * `=`, `+`, `-`, `@`, TAB or CR — so a scraped title of
+ * `=HYPERLINK("http://evil","click")` would execute on open.
+ *
+ * Prefixing such a cell with a single quote makes spreadsheets treat it as
+ * literal text. Values that cannot be numbers are left alone so dates and
+ * scores stay usable.
+ *
+ * @param {unknown} value
+ * @returns {string}
+ */
+function csvSafe(value) {
+  if (value === null || value === undefined) return '';
+  const text = String(value);
+  // Leading characters that spreadsheets interpret as a formula/command.
+  if (/^[=+\-@\t\r]/.test(text)) return `'${text}`;
+  return text;
+}
+
 const exportCsv = asyncHandler(async (req, res) => {
   const db = getDb();
 
@@ -408,20 +432,20 @@ const exportCsv = asyncHandler(async (req, res) => {
   const records = rows.map((r) => {
     const app = mapApplication(r);
     return {
-      Company: app.job?.company || 'Unknown',
-      Role: app.job?.title || 'Unknown',
-      Status: app.status,
+      Company: csvSafe(app.job?.company || 'Unknown'),
+      Role: csvSafe(app.job?.title || 'Unknown'),
+      Status: csvSafe(app.status),
       'Applied Date': app.appliedAt ? String(app.appliedAt).slice(0, 10) : '',
       'Last Updated': app.lastUpdated ? String(app.lastUpdated).slice(0, 10) : '',
-      Source: app.job?.source || '',
+      Source: csvSafe(app.job?.source || ''),
       'Match Score': app.job?.matchScore ?? '',
-      Location: app.job?.location || '',
-      'Applied Via': app.appliedMethod,
+      Location: csvSafe(app.job?.location || ''),
+      'Applied Via': csvSafe(app.appliedMethod),
       'Follow-up Date': app.followUpDate || '',
       'Interview Date': app.interviewDate || '',
-      'Salary Offered': app.salaryOffered || '',
-      'Job URL': app.job?.sourceUrl || '',
-      Notes: app.notes || '',
+      'Salary Offered': csvSafe(app.salaryOffered || ''),
+      'Job URL': csvSafe(app.job?.sourceUrl || ''),
+      Notes: csvSafe(app.notes || ''),
     };
   });
 
@@ -450,6 +474,7 @@ module.exports = {
   updateFollowUp,
   deleteApplication,
   exportCsv,
+  csvSafe,
   STATUSES,
   STATUS_KEYS,
 };
