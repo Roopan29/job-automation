@@ -192,6 +192,11 @@ Jobs** opens a panel where you pick sources (RemoteOK, Remotive, LinkedIn, Indee
 Glassdoor) and pulls fresh listings. Each job card shows the match score, matched/missing
 skill tags, salary, and actions to bookmark, generate a cover letter, or apply.
 
+The **Scrape history** panel underneath expands to show the last 20 scrape runs — when each
+one ran, which source, how many jobs it found versus how many were new, and the failure
+reason for any board that blocked the request. It refreshes automatically after every
+scrape, so this is the first place to look when a source stops returning jobs.
+
 ### 4. Auto Apply (`/auto-apply`)
 The control room. A big ON/OFF switch, today's progress against your daily limit, the
 current queue size, the next scheduled run, and live browser status. Configure the minimum

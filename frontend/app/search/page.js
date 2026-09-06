@@ -19,6 +19,7 @@ import {
   searchJobs,
   getRecommendedJobs,
   scrapeJobs,
+  getScrapeLogs,
   applyToJob,
   autoApplyToJob,
   generateCoverLetter,
@@ -91,6 +92,12 @@ function JobSearchInner() {
   const [scrapeSources, setScrapeSources] = useState(['remoteok', 'remotive', 'linkedin']);
   const [scrapeOpen, setScrapeOpen] = useState(false);
 
+  // ---- scrape history ------------------------------------------------------
+  const [scrapeLogs, setScrapeLogs] = useState([]);
+  const [logsOpen, setLogsOpen] = useState(false);
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [logsError, setLogsError] = useState('');
+
   // ---- modals --------------------------------------------------------------
   const [applyJob, setApplyJob] = useState(null);
   const [letterJob, setLetterJob] = useState(null);
@@ -156,6 +163,23 @@ function JobSearchInner() {
   const toggleSource = (id) =>
     setScrapeSources((prev) => (prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]));
 
+  /**
+   * Load the scrape history. Every scrape writes a row per run, so this is how
+   * a user finds out which board blocked them and when the last run happened.
+   */
+  const loadScrapeLogs = useCallback(async () => {
+    setLogsLoading(true);
+    setLogsError('');
+    try {
+      const data = await getScrapeLogs(20);
+      setScrapeLogs(data.logs || []);
+    } catch (err) {
+      setLogsError(err.message);
+    } finally {
+      setLogsLoading(false);
+    }
+  }, []);
+
   const runScrape = async () => {
     if (!scrapeSources.length) {
       toast.error('Pick at least one source to scrape');
@@ -172,13 +196,15 @@ function JobSearchInner() {
       toast.success(`Scraped ${data.jobsFound} jobs — ${data.jobsAdded} new`);
       setScrapeOpen(false);
       setMode('search');
-      await load(1);
+      await Promise.all([load(1), loadScrapeLogs()]);
     } catch (err) {
       // The backend returns per-source detail; surface the reasons.
       const detail = err.details?.sources
         ?.map((s) => `${s.source}: ${s.error || s.status}`)
         .join('\n');
       toast.error(detail ? `${err.message}\n${detail}` : err.message, { duration: 9000 });
+      // A failed scrape still writes log rows — refresh so the reasons show.
+      await loadScrapeLogs();
     } finally {
       setScraping(false);
     }
@@ -372,6 +398,102 @@ function JobSearchInner() {
           )}
         </div>
       </form>
+
+      {/* ---- scrape history ------------------------------------------------ */}
+      <div className="card mt-4">
+        <button
+          type="button"
+          className="flex w-full items-center justify-between text-left"
+          onClick={() => {
+            const next = !logsOpen;
+            setLogsOpen(next);
+            // Load lazily on first open so the page stays fast.
+            if (next && !scrapeLogs.length) loadScrapeLogs();
+          }}
+        >
+          <span className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+            <Zap size={15} className="text-brand-600" />
+            Scrape history
+          </span>
+          <span className="text-xs text-slate-400">
+            {logsOpen ? 'Hide' : scrapeLogs.length ? `${scrapeLogs.length} run(s)` : 'Show'}
+          </span>
+        </button>
+
+        {logsOpen && (
+          <div className="mt-3" data-testid="scrape-history">
+            {logsLoading && (
+              <div className="flex items-center gap-2 py-4 text-xs text-slate-500">
+                <Spinner size={13} /> Loading scrape history…
+              </div>
+            )}
+
+            {!logsLoading && logsError && (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                Could not load scrape history: {logsError}
+                <button type="button" className="btn-ghost btn-sm ml-2" onClick={loadScrapeLogs}>
+                  Retry
+                </button>
+              </div>
+            )}
+
+            {!logsLoading && !logsError && scrapeLogs.length === 0 && (
+              <p className="py-3 text-xs text-slate-500">
+                No scrapes yet. Run one above and each attempt will be recorded here, per source.
+              </p>
+            )}
+
+            {!logsLoading && !logsError && scrapeLogs.length > 0 && (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-200 text-[11px] uppercase tracking-wide text-slate-400">
+                      <th className="py-2 pr-3 font-medium">When</th>
+                      <th className="py-2 pr-3 font-medium">Source</th>
+                      <th className="py-2 pr-3 font-medium">Found</th>
+                      <th className="py-2 pr-3 font-medium">New</th>
+                      <th className="py-2 pr-3 font-medium">Result</th>
+                      <th className="py-2 font-medium">Detail</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {scrapeLogs.map((log) => (
+                      <tr key={log.id} className="border-b border-slate-100 last:border-0">
+                        <td className="whitespace-nowrap py-2 pr-3 text-slate-500">{log.scrapedAt}</td>
+                        <td className="py-2 pr-3 font-medium text-slate-700">{log.source}</td>
+                        <td className="py-2 pr-3 text-slate-600">{log.jobsFound}</td>
+                        <td className="py-2 pr-3 text-slate-600">{log.jobsAdded}</td>
+                        <td className="py-2 pr-3">
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                              log.status === 'success'
+                                ? 'bg-emerald-50 text-emerald-700'
+                                : 'bg-red-50 text-red-700'
+                            }`}
+                          >
+                            {log.status}
+                          </span>
+                        </td>
+                        <td className="max-w-[22rem] py-2 text-slate-500">
+                          {log.errorMessage || '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <button
+                  type="button"
+                  className="btn-ghost btn-sm mt-2"
+                  onClick={loadScrapeLogs}
+                  disabled={logsLoading}
+                >
+                  Refresh
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* ---- results ----------------------------------------------------- */}
       <div className="flex flex-wrap items-center justify-between gap-2">
