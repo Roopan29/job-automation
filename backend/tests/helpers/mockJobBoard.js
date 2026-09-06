@@ -77,10 +77,40 @@ const REMOTIVE_PAYLOAD = {
 };
 
 /**
- * Start the mock board on an ephemeral port.
- * @returns {Promise<{port:number, remoteOkUrl:string, remotiveUrl:string, close:Function}>}
+ * LinkedIn public guest search markup. Uses the `base-search-card`
+ * class names the scraper looks for.
  */
-function startMockJobBoard() {
+const LINKEDIN_HTML = `<!doctype html><html><body><ul>
+  <li class="base-card">
+    <div class="base-search-card__title">Product Designer</div>
+    <div class="base-search-card__subtitle"><a href="https://linkedin.com/company/umbrella">Umbrella</a></div>
+    <div class="base-search-card__location">Remote - UK</div>
+    <span class="job-search-card__salary-info">£60k - £80k</span>
+    <a class="base-card__full-link" href="https://www.linkedin.com/jobs/view/3001?trackingId=abc123">link</a>
+    <div class="base-search-card__snippet">Design and ship product experiences.</div>
+    <time datetime="2026-09-03">3 days ago</time>
+  </li>
+  <li class="base-card">
+    <div class="base-search-card__title">Staff Platform Engineer</div>
+    <div class="base-search-card__subtitle"><a href="https://linkedin.com/company/soylent">Soylent</a></div>
+    <div class="base-search-card__location">Berlin, Germany</div>
+    <a class="base-card__full-link" href="https://www.linkedin.com/jobs/view/3002">link</a>
+    <time datetime="2026-08-30">1 week ago</time>
+  </li>
+</ul></body></html>`;
+
+/** What LinkedIn serves when it decides you must log in. */
+const LINKEDIN_AUTHWALL_HTML =
+  '<html><body><div id="authwall">Sign in to LinkedIn to continue</div></body></html>';
+
+/**
+ * Start the mock board on an ephemeral port.
+ * @param {{linkedinMode?: 'jobs'|'authwall'}} [opts]
+ * @returns {Promise<{port:number, remoteOkUrl:string, remotiveUrl:string, linkedinUrl:string, close:Function}>}
+ */
+function startMockJobBoard(opts = {}) {
+  const linkedinMode = opts.linkedinMode || 'jobs';
+
   const server = http.createServer((req, res) => {
     if (req.url.startsWith('/remoteok')) {
       res.writeHead(200, { 'content-type': 'application/json' });
@@ -90,6 +120,11 @@ function startMockJobBoard() {
     if (req.url.startsWith('/remotive')) {
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify(REMOTIVE_PAYLOAD));
+      return;
+    }
+    if (req.url.startsWith('/linkedin')) {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      res.end(linkedinMode === 'authwall' ? LINKEDIN_AUTHWALL_HTML : LINKEDIN_HTML);
       return;
     }
     res.writeHead(404, { 'content-type': 'text/plain' });
@@ -103,6 +138,7 @@ function startMockJobBoard() {
         port,
         remoteOkUrl: `http://127.0.0.1:${port}/remoteok`,
         remotiveUrl: `http://127.0.0.1:${port}/remotive`,
+        linkedinUrl: `http://127.0.0.1:${port}/linkedin`,
         close: () => new Promise((r) => server.close(r)),
       });
     });

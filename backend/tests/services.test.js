@@ -590,3 +590,46 @@ test('scrapeJobs: one source failing does not sink the other', async () => {
     await board.close();
   }
 });
+
+test('LinkedIn parser: extracts cards from guest-search HTML', async () => {
+  const board = await startMockJobBoard();
+  process.env.LINKEDIN_GUEST_URL = board.linkedinUrl;
+  try {
+    const jobs = await jobScraper.scrapeLinkedIn({ query: 'designer', location: 'Remote', limit: 10 });
+
+    assert.equal(jobs.length, 2, 'both cards should parse');
+    const designer = jobs.find((j) => j.title === 'Product Designer');
+    assert.ok(designer, 'the designer card should be present');
+    assert.equal(designer.company, 'Umbrella');
+    assert.equal(designer.location, 'Remote - UK');
+    assert.equal(designer.salary, '£60k - £80k');
+    assert.equal(designer.posted_date, '2026-09-03', 'taken from the <time datetime> attribute');
+    // Tracking query params must be stripped from the canonical URL.
+    assert.equal(designer.source_url, 'https://www.linkedin.com/jobs/view/3001');
+    assert.equal(designer.source_url.includes('trackingId'), false);
+    assert.equal(designer.source, 'LinkedIn');
+
+    // A card with no salary should still parse, not be dropped.
+    const staff = jobs.find((j) => j.title === 'Staff Platform Engineer');
+    assert.ok(staff, 'a card without salary must still be kept');
+    assert.equal(staff.company, 'Soylent');
+  } finally {
+    delete process.env.LINKEDIN_GUEST_URL;
+    await board.close();
+  }
+});
+
+test('LinkedIn parser: reports the auth wall instead of returning nothing', async () => {
+  const board = await startMockJobBoard({ linkedinMode: 'authwall' });
+  process.env.LINKEDIN_GUEST_URL = board.linkedinUrl;
+  try {
+    await assert.rejects(
+      () => jobScraper.scrapeLinkedIn({ query: 'x', location: 'Remote', limit: 10 }),
+      /login wall/i,
+      'the auth wall must surface as a clear error, not an empty job list'
+    );
+  } finally {
+    delete process.env.LINKEDIN_GUEST_URL;
+    await board.close();
+  }
+});
