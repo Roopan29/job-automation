@@ -32,7 +32,7 @@ telemetry. Everything lives in a local SQLite file and a folder of your own resu
 
 | Capability | How |
 | --- | --- |
-| Resume parsing | `pdf-parse` for PDF, `mammoth` for DOCX; extracts skills (300+ keyword dictionary), experience, education, contact info, summary |
+| Resume parsing | `pdf-parse` for PDF, `mammoth` for DOCX; extracts skills (250+ keyword dictionary), experience, education, contact info, summary |
 | ATS scoring | 8 weighted categories totalling 100, graded A+ → F, with concrete improvement tips |
 | Job scraping | RemoteOK + Remotive (public JSON APIs), LinkedIn (public guest search), Indeed + Glassdoor (Puppeteer) — 2–5 s random delays, realistic user agent, per-source error isolation |
 | Matching | Matched vs. missing skills, bonus points for seniority/location/keyword overlap, capped at 100 |
@@ -147,7 +147,7 @@ job-automation/
 │   ├── scheduler/cronJobs.js     # 4 scheduled jobs
 │   ├── middleware/uploadMiddleware.js
 │   ├── utils/                    # logger, apiResponse, fileHelper, notifier, serialize
-│   └── tests/                    # 75 tests + demo seeder
+│   └── tests/                    # 77 tests + demo seeder
 │
 └── frontend/
     ├── package.json
@@ -447,7 +447,7 @@ cd backend
 npm test
 ```
 
-**75 tests** — 27 service-level unit tests and 48 API integration tests. The integration
+**77 tests** — 29 service-level unit tests and 48 API integration tests. The integration
 suite boots the real Express app on an ephemeral port against a throwaway temp database,
 so it exercises the actual controllers, routes and SQLite schema rather than a mock.
 

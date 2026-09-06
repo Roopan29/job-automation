@@ -12,7 +12,7 @@
  * Text extraction uses `pdf-parse` for PDFs and `mammoth` for DOCX.
  * Everything after that is deterministic pattern matching:
  *
- *   • skills      – matched against SKILL_DICTIONARY (300+ entries)
+ *   • skills      – matched against SKILL_DICTIONARY (250+ entries)
  *   • experience  – "Job title | Company | Mon YYYY – Mon YYYY" blocks
  *   • education   – degree phrases + institution + graduation year
  *   • summary     – the paragraph under Summary / Objective / Profile
