@@ -219,5 +219,7 @@ export const getDashboard = () => http.get('/dashboard');
 export const getHealth = () => http.get('/health');
 export const getSystemStatus = () => http.get('/system/status');
 export const getNotifications = (limit = 20) => http.get('/notifications', { params: { limit } });
+/** Empty the notification feed. */
+export const clearNotifications = () => http.delete('/notifications');
 
 export default http;

@@ -227,6 +227,9 @@ rejected.
 
 1. **Start both servers** (see [Quick start](#quick-start)).
 2. **Open http://localhost:3000.** The sidebar shows a green dot when the backend is up.
+   The 🔔 bell next to the logo polls the backend alert feed every 15 s — scrapes, CAPTCHA
+   prompts and follow-up reminders land there, so nothing is missed on a machine with no
+   desktop notification daemon. A red badge marks unread items; **Clear** empties the feed.
 3. **Go to My Resumes** and upload your resume. Wait for the parse — you'll see the
    extracted skills, experience and education, plus an ATS score.
 4. **Read the ATS breakdown.** Click the score to expand the 8 categories and the
