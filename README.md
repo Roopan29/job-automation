@@ -326,6 +326,13 @@ override.
 | `PUPPETEER_USER_AGENT` | Chrome 120 UA | Bot user agent |
 | `CAPTCHA_TIMEOUT_MS` | `300000` | 5 min to solve a CAPTCHA |
 | `NAV_TIMEOUT_MS` | `45000` | Page navigation timeout |
+| `REMOTEOK_API_URL` | `https://remoteok.com/api` | RemoteOK JSON feed |
+| `REMOTIVE_API_URL` | `https://remotive.com/api/remote-jobs` | Remotive JSON feed |
+| `LINKEDIN_GUEST_URL` | LinkedIn guest-search endpoint | Public, no login needed |
+
+The three job-board URLs are optional overrides — leave them unset to use the real boards.
+They exist so the parser can be pointed at a local fixture for testing (this is how the
+scraper's unit tests run with no network), or at a mirror if a board moves.
 
 The frontend reads `BACKEND_URL` (default `http://localhost:5000`) for its API proxy, and
 `NEXT_PUBLIC_API_URL` to override the browser-side base URL.
