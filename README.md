@@ -422,6 +422,7 @@ Every response uses one envelope:
 | `GET` | `/api/health` | Liveness |
 | `GET` | `/api/system/status` | Browser + AI + scheduler health |
 | `GET` | `/api/notifications` | Notification feed |
+| `DELETE` | `/api/notifications` | Clear the feed (the bell's **Clear** button) |
 
 ---
 
