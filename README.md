@@ -347,7 +347,8 @@ They exist so the parser can be pointed at a local fixture for testing (this is 
 scraper's unit tests run with no network), or at a mirror if a board moves.
 
 The frontend reads `BACKEND_URL` (default `http://localhost:5000`) for its API proxy, and
-`NEXT_PUBLIC_API_URL` to override the browser-side base URL.
+`NEXT_PUBLIC_API_URL` to override the browser-side base URL. `NEXT_PUBLIC_BACKEND_URL` is
+accepted as a fallback for `BACKEND_URL` when you can only set public variables.
 
 ---
 
